@@ -1,4 +1,7 @@
-from .add_img_to_ppt import add_img_to_ppt
+'''
+Init file for tools
+'''
+
 from .get_iEEG_data import get_iEEG_data
 from .gini import gini
 from .line_length import line_length
