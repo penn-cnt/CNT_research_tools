@@ -6,7 +6,7 @@ import pickle
 # from pull_patient_localization import pull_patient_localization
 from numbers import Number
 import numpy as np
-from clean_channels import clean_channels
+from .clean_labels import clean_labels
 
 def get_iEEG_data(username, password_bin_file, iEEG_filename, start_time_usec, stop_time_usec, select_electrodes=None, ignore_electrodes=None, outputfile=None):
     """"
@@ -72,14 +72,14 @@ def get_iEEG_data(username, password_bin_file, iEEG_filename, start_time_usec, s
     s = Session(username, pwd)
     ds = s.open_dataset(iEEG_filename)
     all_channel_labels = ds.get_channel_labels()
-    all_channel_labels, _ = clean_channels(all_channel_labels)
+    all_channel_labels = clean_labels(all_channel_labels)
 
     if select_electrodes is not None:
         if isinstance(select_electrodes[0], Number):
             channel_ids = select_electrodes
             channel_names = [all_channel_labels[e] for e in channel_ids]
         elif isinstance(select_electrodes[0], str):
-            select_electrodes, _ = clean_channels(select_electrodes)
+            select_electrodes = clean_labels(select_electrodes)
             
             channel_ids = [i for i, e in enumerate(all_channel_labels) if e in select_electrodes]
             channel_names = select_electrodes
@@ -91,7 +91,7 @@ def get_iEEG_data(username, password_bin_file, iEEG_filename, start_time_usec, s
             channel_ids = [i for i in np.arange(len(all_channel_labels)) if i not in ignore_electrodes]
             channel_names = [all_channel_labels[e] for e in channel_ids]
         elif isinstance(ignore_electrodes[0], str):
-            ignore_electrodes, _ = clean_channels(ignore_electrodes)
+            ignore_electrodes = clean_labels(ignore_electrodes)
 
             channel_ids = [i for i, e in enumerate(all_channel_labels) if e not in ignore_electrodes]
             channel_names = [e for e in all_channel_labels if e not in ignore_electrodes]
