@@ -1,0 +1,16 @@
+%% Path parameters
+ieeg_folder = '/Users/erinconrad/Desktop/research/spike_locations/scripts/tools/ieeg-matlab-1.13.2';
+ieeg_pw_file = '/Users/erinconrad/Desktop/research/spike_locations/scripts/tools/eri_ieeglogin.bin';
+ieeg_login = 'erinconr';
+
+%% Clip parameters
+file_name = 'HUP212_phaseII';
+times = [100000 100015];
+which_reference = 'car';
+
+%% Add paths
+% Add path to this codebase
+addpath(genpath('./..'))
+
+% Add path to ieeg codeba
+

@@ -1,5 +1,7 @@
 function ekg = find_non_intracranial(labels)
 
+% ADD DC CHANNELS
+
 ekg = zeros(length(labels),1);
 
 for i = 1:length(labels)
