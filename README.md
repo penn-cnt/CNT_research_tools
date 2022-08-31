@@ -20,6 +20,5 @@ conda env create -n ieegpy -f python/ieegpy.yml
 ```
 
 ## Resources
-
-Project Tracker: https://docs.google.com/spreadsheets/d/12f-cCzB2J7W96jZzbJH7HKbWrivrUa2PKcRpQZsHXpM/edit?usp=sharing
-Background Notes: https://docs.google.com/document/d/17qalWwt5yb7NOVwob53GO_U_6H2GWmNjsN_aptjJoSw/edit?usp=sharing
+* [Project Tracker Google doc](https://docs.google.com/spreadsheets/d/12f-cCzB2J7W96jZzbJH7HKbWrivrUa2PKcRpQZsHXpM/edit?usp=sharing)
+* [Background Notes Google doc](https://docs.google.com/document/d/17qalWwt5yb7NOVwob53GO_U_6H2GWmNjsN_aptjJoSw/edit?usp=sharing)
