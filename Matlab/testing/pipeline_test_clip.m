@@ -8,7 +8,7 @@ ieeg_login = 'erinconr';
 %% Clip parameters
 file_name = 'HUP212_phaseII';
 times = [100000 100015];
-which_reference = 'bipolar';
+which_reference = 'car';
 [elec_names,elec_locs] = get_elec_names_locs_test(file_name);
 
 %% Add paths
@@ -33,6 +33,8 @@ nchs = size(old_values,2);
 [labels,~,~] = decompose_labels(oldLabels,name);
 
 %% Reconcile locs and associated names with ieeg ch names
+% This function takes elec_locs, corresponding 1:1 with elec_names, and
+% returns locs, which corresponds 1:1 with labels.
 locs = reconcile_ch_names(labels,elec_names,elec_locs,name);
 
 %% Non intracranial
@@ -51,26 +53,34 @@ old_labels = labels;
 switch which_reference
     case 'car'
         [values,labels] = common_average_reference(old_values,~extra_cranial&~bad,labels);
-        show_values = values(:,~extra_cranial & ~bad);
-        show_labels = labels(~extra_cranial & ~bad);
     case 'bipolar'
         [values,~,labels,chs_in_bipolar] = bipolar_montage(old_values,labels,[],[],name);
         bad_ref = any(ismember(chs_in_bipolar,find(bad)),2);
         extra_ref = any(ismember(chs_in_bipolar,find(extra_cranial)),2);
+    case 'laplacian'
+        radius = 50;
+        [values,close_chs,labels] = laplacian_reference(...
+            old_values,~extra_cranial&~bad,locs,radius,labels);        
+end
+
+%% Remove bad channels
+switch which_reference
+    case 'car'
+        show_values = values(:,~extra_cranial & ~bad);
+        show_labels = labels(~extra_cranial & ~bad);
+    case 'bipolar'
         show_values = values(:,~bad_ref & ~extra_ref);
         show_labels = labels(~bad_ref & ~extra_ref);
     case 'laplacian'
-        radius = 10;
-        [values,close_chs,labels] = laplacian_reference(...
-            old_values,~extra_cranial&~bad,locs,radius,labels);
         show_values = values(:,~extra_cranial & ~bad);
         show_labels = labels(~extra_cranial & ~bad);
 end
 
-
+%% Pre-whiten data
+whitened_values = pre_whiten(show_values);
 
 %% Plot the EEG
-show_eeg(show_values,fs,show_labels)
+show_eeg(whitened_values,fs,show_labels)
 
 function [elec_names,elec_locs] = get_elec_names_locs_test(file_name)
 
