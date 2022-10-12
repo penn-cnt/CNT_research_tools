@@ -8,7 +8,7 @@ ieeg_login = 'erinconr';
 %% Clip parameters
 file_name = 'HUP212_phaseII';
 times = [100000 100015];
-which_reference = 'car';
+which_reference = 'bipolar';
 [elec_names,elec_locs] = get_elec_names_locs_test(file_name);
 
 %% Add paths
@@ -46,7 +46,7 @@ bad = identify_bad_chs(old_values,fs);
 %don't remove bad channels!
 
 %% Notch Filter
-old_values = notch_filter(old_values,fs);
+%old_values = notch_filter(old_values,fs);
 
 %% Common average reference (include only intra-cranial)
 old_labels = labels;
@@ -80,7 +80,7 @@ end
 whitened_values = pre_whiten(show_values);
 
 %% Plot the EEG
-show_eeg(whitened_values,fs,show_labels)
+show_eeg(show_values,fs,show_labels)
 
 function [elec_names,elec_locs] = get_elec_names_locs_test(file_name)
 
