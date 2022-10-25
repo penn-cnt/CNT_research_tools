@@ -2,9 +2,13 @@
 config.json
 
 # Byte-compiled / optimized / DLL files
-*__pycache__/
+*/__pycache__/
 *.py[cod]
 *$py.class
+*.DS_Store
+*.ipynb_checkpoints
+data.zip
+__pycache__/
 
 # C extensions
 *.so
