@@ -1,145 +1,225 @@
-# pylint: disable-msg=C0103
-from ieeg.auth import Session
-import pandas as pd
+import os
+import time
 import pickle
-#from .pull_patient_localization import pull_patient_localization
-# from pull_patient_localization import pull_patient_localization
-from numbers import Number
+import logging
 import numpy as np
+import pandas as pd
+import logging.handlers
+from typing import List, Union, Optional, Tuple
+from ieeg.auth import Session
 from .clean_labels import clean_labels
 
-def get_iEEG_data(username, password_bin_file, iEEG_filename, start_time_usec, stop_time_usec, select_electrodes=None, ignore_electrodes=None, outputfile=None):
-    """"
-    2020.04.06. Python 3.7
-    Andy Revell, adapted by Akash Pattnaik (2021.06.23)
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    Purpose:
-    To get iEEG data from iEEG.org. Note, you must download iEEG python package from GitHub - instructions are below
-    1. Gets time series data and sampling frequency information. Specified electrodes are removed.
-    2. Saves as a pickle format
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    Input
-        username: your iEEG.org username
-        password_bin_file: your iEEG.org password bin_file
-        iEEG_filename: The file name on iEEG.org you want to download from
-        start_time_usec: the start time in the iEEG_filename. In microseconds
-        stop_time_usec: the stop time in the iEEG_filename. In microseconds.
-            iEEG.org needs a duration input: this is calculated by stop_time_usec - start_time_usec
-        ignore_electrodes: the electrode/channel names you want to exclude. EXACT MATCH on iEEG.org. Caution: some may be LA08 or LA8
-        outputfile: the path and filename you want to save.
-            PLEASE INCLUDE EXTENSION .pickle.
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    Output:
-        Saves file outputfile as a pickle. For more info on pickling, see https://docs.python.org/3/library/pickle.html
-        Briefly: it is a way to save + compress data. it is useful for saving lists, as in a list of time series data and sampling frequency together along with channel names
-        List index 0: Pandas dataframe. T x C (rows x columns). T is time. C is channels.
-        List index 1: float. Sampling frequency. Single number
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    Example usage:
-    username = 'arevell'
-    password = 'password'
-    iEEG_filename='HUP138_phaseII'
-    start_time_usec = 248432340000
-    stop_time_usec = 248525740000
-    removed_channels = ['EKG1', 'EKG2', 'CZ', 'C3', 'C4', 'F3', 'F7', 'FZ', 'F4', 'F8', 'LF04', 'RC03', 'RE07', 'RC05', 'RF01', 'RF03', 'RB07', 'RG03', 'RF11', 'RF12']
-    outputfile = '/Users/andyrevell/mount/DATA/Human_Data/BIDS_processed/sub-RID0278/eeg/sub-RID0278_HUP138_phaseII_248432340000_248525740000_EEG.pickle'
-    get_iEEG_data(username, password, iEEG_filename, start_time_usec, stop_time_usec, removed_channels, outputfile)
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    To run from command line:
-    python3.6 -c 'import get_iEEG_data; get_iEEG_data.get_iEEG_data("arevell", "password", "HUP138_phaseII", 248432340000, 248525740000, ["EKG1", "EKG2", "CZ", "C3", "C4", "F3", "F7", "FZ", "F4", "F8", "LF04", "RC03", "RE07", "RC05", "RF01", "RF03", "RB07", "RG03", "RF11", "RF12"], "/gdrive/public/DATA/Human_Data/BIDS_processed/sub-RID0278/eeg/sub-RID0278_HUP138_phaseII_D01_248432340000_248525740000_EEG.pickle")'
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    #How to get back pickled files
-    with open(outputfile, 'rb') as f: data, fs = pickle.load(f)
+enable_logging = True
+if enable_logging:
+    log_filename = os.path.join(os.pardir, "logs", "iEEG_data_retrieval.log")
+    os.makedirs(os.path.dirname(log_filename), exist_ok=True)
+
+    logging.basicConfig(
+        level=logging.INFO,  # or DEBUG for more detailed logs
+        format="%(asctime)s [%(levelname)s] - %(message)s",
+        handlers=[
+            logging.handlers.RotatingFileHandler(
+                log_filename, maxBytes=5 * 1024 * 1024, backupCount=3
+            ),
+            logging.StreamHandler(),
+        ],
+    )
+
+    logger = logging.getLogger()
+    logger.info("Logger initialized.")
+else:
+    logger = logging.getLogger()
+    logger.disabled = True
+
+MAX_RETRIES = 50
+SLEEP_DURATION = 1
+CLIP_DURATION_LIMIT = int(120e6)
+MAX_CHANNELS_AT_ONCE = 100
+CLIP_SIZE = int(60e6)
+CHANNEL_SIZE = 20
+
+
+def _pull_iEEG(
+    dataset: object, start_usec: int, duration_usec: int, channel_ids: List[int]
+) -> Union[np.array, None]:
     """
+    Retrieve data from an iEEG dataset within a specified time range and for specified channels.
 
-    # print("\n\nGetting data from iEEG.org:")
-    # print("iEEG_filename: {0}".format(iEEG_filename))
-    # print("start_time_usec: {0}".format(start_time_usec))
-    # print("stop_time_usec: {0}".format(stop_time_usec))
-    # print("ignore_electrodes: {0}".format(ignore_electrodes))
-    # if outputfile:
-    #     print("Saving to: {0}".format(outputfile))
-    # else:
-    #     print("Not saving, returning data and sampling frequency")
+    Parameters:
+    - dataset (object): The iEEG dataset object.
+    - start_usec (int): The start time in microseconds.
+    - duration_usec (int): Duration for which data is to be pulled in microseconds.
+    - channel_ids (list): List of channel IDs to pull the data from.
 
-    # Pull and format metadata from patient_localization_mat
-    
-    start_time_usec = int(start_time_usec)
-    stop_time_usec = int(stop_time_usec)
+    Returns:
+    - array or None: Returns the data as an array if successful, otherwise None.
+    """
+    for _ in range(MAX_RETRIES):
+        try:
+            return dataset.get_data(start_usec, duration_usec, channel_ids)
+        except Exception:  # TODO: catch specific exceptions
+            time.sleep(SLEEP_DURATION)
+
+    logger.error(
+        f"Failed to pull data for {dataset.name}, {start_usec / 1e6}, {duration_usec / 1e6}, {len(channel_ids)} channels"
+    )
+    return None
+
+
+def get_channel_ids(
+    all_channel_labels: List[str],
+    electrodes: List[Union[str, int]],
+    mode: str = "select",
+) -> List[int]:
+    """
+    Derive channel IDs based on provided labels or IDs and mode (select or ignore).
+
+    Parameters:
+    - all_channel_labels (list): List of all available channel labels in the dataset.
+    - electrodes (list): List of channel labels or IDs to be selected or ignored.
+    - mode (str): Either "select" or "ignore" to determine behavior. Defaults to "select".
+
+    Returns:
+    - list: List of channel IDs.
+    """
+    if isinstance(electrodes[0], int):
+        ids = (
+            electrodes
+            if mode == "select"
+            else [i for i in range(len(all_channel_labels)) if i not in electrodes]
+        )
+    elif isinstance(electrodes[0], str):
+        if any([e not in all_channel_labels for e in electrodes]):
+            raise ValueError("Channel not in iEEG")
+        ids = [
+            i
+            for i, e in enumerate(all_channel_labels)
+            if (e in electrodes) == (mode == "select")
+        ]
+    else:
+        raise TypeError("Electrodes not given as a list of ints or strings")
+
+    return ids
+
+
+def get_iEEG_data(
+    username: str,
+    password_bin_file: str,
+    iEEG_filename: str,
+    start_time_usec: float,
+    stop_time_usec: float,
+    select_electrodes: Optional[List[Union[str, int]]] = None,
+    ignore_electrodes: Optional[List[Union[str, int]]] = None,
+    clean_channel_labels: bool = False,
+    remove_substr: Optional[str] = None,
+    delimiter: Optional[str] = None,
+    output_file: Optional[str] = None,
+) -> Union[Tuple[pd.DataFrame, float], None]:
+    """
+    Retrieve iEEG data from a dataset based on specified parameters.
+
+    Parameters:
+    - username (str): Username for accessing the dataset.
+    - password_bin_file (str): iEEG password bin file for accessing the dataset.
+    - iEEG_filename (str): The filename or ID of the iEEG dataset.
+    - start_time_usec (float): The start time in microseconds.
+    - stop_time_usec (float): The stop time in microseconds.
+    - select_electrodes (list, optional): List of channel labels or IDs to be specifically selected. Defaults to None.
+    - ignore_electrodes (list, optional): List of channel labels or IDs to be ignored. Defaults to None.
+    - clean_channel_labels (bool, optional): Whether to clean the channel labels using the clean_labels function. Defaults to False.
+    - remove_substr (str, optional): A substring to remove from each label when cleaning. Defaults to None.
+    - delimiter (str, optional): A delimiter to split and rejoin label parts when cleaning. Defaults to None.
+    - output_file (str, optional): If provided, the resulting data will be saved to this file. Defaults to None.
+
+    Returns:
+    - tuple or None: If not saving to an output file, returns a tuple of (DataFrame, sample rate). If any error occurs, or if saving to an output file, returns None.
+    """
     duration = stop_time_usec - start_time_usec
 
-    pwd = open(password_bin_file, 'r').read()
-    s = Session(username, pwd)
-    ds = s.open_dataset(iEEG_filename)
-    all_channel_labels = ds.get_channel_labels()
-    all_channel_labels = clean_labels(all_channel_labels)
-
-    if select_electrodes is not None:
-        if isinstance(select_electrodes[0], Number):
-            channel_ids = select_electrodes
-            channel_names = [all_channel_labels[e] for e in channel_ids]
-        elif isinstance(select_electrodes[0], str):
-            select_electrodes = clean_labels(select_electrodes)
-            
-            channel_ids = [i for i, e in enumerate(all_channel_labels) if e in select_electrodes]
-            channel_names = select_electrodes
-        else:
-            print("Electrodes not given as a list of ints or strings")
-
-    if ignore_electrodes is not None:
-        if isinstance(ignore_electrodes[0], int):
-            channel_ids = [i for i in np.arange(len(all_channel_labels)) if i not in ignore_electrodes]
-            channel_names = [all_channel_labels[e] for e in channel_ids]
-        elif isinstance(ignore_electrodes[0], str):
-            ignore_electrodes = clean_labels(ignore_electrodes)
-
-            channel_ids = [i for i, e in enumerate(all_channel_labels) if e not in ignore_electrodes]
-            channel_names = [e for e in all_channel_labels if e not in ignore_electrodes]
-        else:
-            print("Electrodes not given as a list of ints or strings")
-
+    # Connecting to a session and open dataset
+    for _ in range(MAX_RETRIES):
+        try:
+            pwd = open(password_bin_file, "r").read()
+            session = Session(username, pwd)
+            dataset = session.open_dataset(iEEG_filename)
+            all_channel_labels = dataset.get_channel_labels()
+            break
+        except Exception:  # TODO: catch specific exceptions
+            time.sleep(SLEEP_DURATION)
     else:
-        channel_ids = np.arange(len(all_channel_labels))
-        channel_names = all_channel_labels
+        raise ValueError("Failed to open dataset")
+    logger.info(f"Connected to dataset: {iEEG_filename}")
 
-    try:
-        data = ds.get_data(start_time_usec, duration, channel_ids)
-    except Exception as e:
-        # clip is probably too big, pull chunks and concatenate
-        clip_size = 60 * 1e6
+    if clean_channel_labels:
+        # Clean all channel labels initially
+        all_channel_labels = clean_labels(all_channel_labels, remove_substr, delimiter)
+        if select_electrodes:
+            select_electrodes = clean_labels(
+                select_electrodes, remove_substr, delimiter
+            )
+        if ignore_electrodes:
+            ignore_electrodes = clean_labels(
+                ignore_electrodes, remove_substr, delimiter
+            )
+        logger.info(
+            f"Cleaned channel labels with substr: {remove_substr} and delimiter: {delimiter}"
+        )
 
-        clip_start = start_time_usec
-        data = None
-        while clip_start + clip_size < stop_time_usec:
-            if data is None:
-                data = ds.get_data(clip_start, clip_size, channel_ids)
-            else:
-                data = np.concatenate(([data, ds.get_data(clip_start, clip_size, channel_ids)]), axis=0)
-            clip_start = clip_start + clip_size
-        data = np.concatenate(([data, ds.get_data(clip_start, stop_time_usec - clip_start, channel_ids)]), axis=0)
+    # Determine channel IDs and names
+    if select_electrodes:
+        channel_ids = get_channel_ids(
+            all_channel_labels, select_electrodes, mode="select"
+        )
+    elif ignore_electrodes:
+        channel_ids = get_channel_ids(
+            all_channel_labels, ignore_electrodes, mode="ignore"
+        )
+    else:
+        channel_ids = list(range(len(all_channel_labels)))
+
+    channel_names = [all_channel_labels[i] for i in channel_ids]
+
+    # Fetch data
+    data = []
+    if duration < CLIP_DURATION_LIMIT and len(channel_ids) < MAX_CHANNELS_AT_ONCE:
+        data.append(_pull_iEEG(dataset, start_time_usec, duration, channel_ids))
+    else:
+        # Determine if breaking by time or by channel
+        if duration > CLIP_DURATION_LIMIT:
+            for clip_start in range(
+                int(start_time_usec), int(stop_time_usec), CLIP_SIZE
+            ):
+                clip_duration = min(CLIP_SIZE, stop_time_usec - clip_start)
+                data.append(_pull_iEEG(dataset, clip_start, clip_duration, channel_ids))
+        else:
+            for start_idx in range(0, len(channel_ids), CHANNEL_SIZE):
+                end_idx = start_idx + CHANNEL_SIZE
+                ids_slice = channel_ids[start_idx:end_idx]
+                data.append(_pull_iEEG(dataset, start_time_usec, duration, ids_slice))
+
+        # Check if any data fetching failed
+        if any(d is None for d in data):
+            logger.error("Failed to fetch some data segments.")
+            return None
+
+    # Combine data segments
+    data = np.concatenate(data, axis=1 if duration <= CLIP_DURATION_LIMIT else 0)
 
     df = pd.DataFrame(data, columns=channel_names)
-    fs = ds.get_time_series_details(ds.ch_labels[0]).sample_rate #get sample rate
+    fs = dataset.get_time_series_details(
+        dataset.ch_labels[0]
+    ).sample_rate  # get sample rate
 
-    if outputfile:
-        with open(outputfile, 'wb') as f: pickle.dump([df, fs], f)
+    logger.info(
+        f"Data fetched successfully for {iEEG_filename} from {start_time_usec / 1e6} to {stop_time_usec / 1e6} seconds."
+    )
+
+    if output_file:
+        try:
+            with open(output_file, "wb") as f:
+                pickle.dump([df, fs], f)
+            logger.info(f"Data successfully written to {output_file}.")
+        except Exception as e:
+            logger.error(f"Failed to write data to {output_file}. Error: {e}")
     else:
         return df, fs
-
-    # session.delete
-    # clear variables
-
-""""
-Download and install iEEG python package - ieegpy
-GitHub repository: https://github.com/ieeg-portal/ieegpy
-If you downloaded this code from https://github.com/andyrevell/paper001.git then skip to step 2
-1. Download/clone ieepy. 
-    git clone https://github.com/ieeg-portal/ieegpy.git
-2. Change directory to the GitHub repo
-3. Install libraries to your python Path. If you are using a virtual environment (ex. conda), make sure you are in it
-    a. Run:
-        python setup.py build
-    b. Run: 
-        python setup.py install
-              
-"""

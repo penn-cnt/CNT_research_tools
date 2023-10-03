@@ -1,74 +1,87 @@
-from matplotlib import colors
 import matplotlib.pyplot as plt
-import seaborn as sns
 import numpy as np
-from matplotlib.collections import LineCollection
 import pandas as pd
+from typing import Tuple, Union
 
-def plot_iEEG_data(data, t, fig=None, ax=None, linecolor='k'):
-    """"
-    2021.06.23. Python 3.8
-    Akash Pattnaik
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    Purpose:
-    To plot iEEG data
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    Input
-        data: iEEG data in pandas.DataFrame or numpy.array
-        time: time array 
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    Output:
-        Returns figure handle
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+def plot_iEEG_data(
+    data: Union[pd.DataFrame, np.ndarray],
+    start_time_usec: float,
+    stop_time_usec: float,
+    title: str = "iEEG Data",
+) -> Tuple[plt.Figure, plt.Axes]:
+    """
+    Plots iEEG data, with each channel offset vertically for better visibility.
+    NaN values are replaced with zeros for visualization purposes.
+
+    Parameters:
+        data (Union[pd.DataFrame, np.ndarray]): The iEEG data to plot. If a DataFrame,
+            columns are assumed to represent channels.
+        start_time_usec (float): The start time in microseconds.
+        stop_time_usec (float): The stop time in microseconds.
+        title (str, optional): The title of the plot. Defaults to 'iEEG Data'.
+
+    Returns:
+        Tuple[plt.Figure, plt.Axes]: The figure and axis objects.
     """
 
-    if fig is None and ax is None:
-        fig, ax = plt.subplots()
-
-    # Show only bottom and left axis for visibility, format tick labels
-    ax.spines['right'].set_visible(False)
-    ax.spines['top'].set_visible(False)
-    ax.ticklabel_format(useOffset=False)
-
-    if data.ndim == 2:
-        n_rows = data.shape[1]
-    else:
-        n_rows = 1
-
-    ticklocs = []
-    ax.set_xlim(t[0], t[-1])
-    dmin = data.min().min()
-    dmax = data.max().min()
-
-    dr = (dmax - dmin) * 0.8 # Crowd them a bit.
-
-    y0 = dmin
-    y1 = (n_rows - 1) * dr + dmax
-    ax.set_ylim(y0, y1)
-
-    segs = []
-    for i in range(n_rows):
-        if isinstance(data, pd.DataFrame):
-            segs.append(np.column_stack((t, data.iloc[:,i])))
-        elif isinstance(data, np.ndarray):
-            segs.append(np.column_stack((t, data[:,i])))
-        else:
-            print("Data is not in valid format")
-
-    for i in reversed(range(n_rows)):
-        ticklocs.append(i * dr)
-
-    offsets = np.zeros((n_rows, 2), dtype=float)
-    offsets[:, 1] = ticklocs
-
-    lines = LineCollection(segs, offsets=offsets, transOffset=None, colors=linecolor, linewidth=0.2)
-    ax.add_collection(lines)
-
-    # # Set the yticks to use axes coordinates on the y axis
-    ax.set_yticks(ticklocs)
+    # Replace NaN values with 0 and reverse channel order for visualization purposes
     if isinstance(data, pd.DataFrame):
-        ax.set_yticklabels(data.columns)
+        data = data.fillna(0)
+        data = data.iloc[:, ::-1]
+    elif isinstance(data, np.ndarray):
+        data = np.nan_to_num(data)
+        data = data.iloc[:, ::-1]
 
-    ax.set_xlabel('Time (s)')
+    # Convert start and stop times to seconds
+    start_time_sec = start_time_usec / 1e6
+    stop_time_sec = stop_time_usec / 1e6
+
+    # Create a time vector in seconds
+    t_sec = np.linspace(start_time_sec, stop_time_sec, num=data.shape[0])
+
+    # Create a figure and a single set of axes
+    fig, ax = plt.subplots(figsize=(10, 10))
+
+    # Calculate vertical offset for each channel
+    offsets = (
+        np.arange(data.shape[1]) * 200
+    )  # Adjust the multiplier to control vertical spacing
+
+    # Loop through each channel and plot the data with vertical offset
+    for i in range(data.shape[1]):
+        ax.plot(
+            t_sec, data.iloc[:, i] + offsets[i], color="black", linewidth=0.8
+        )  # Set color to black and decrease linewidth
+
+    # Hide the spines (borders)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+
+    # Remove y-axis ticks and labels
+    ax.set_yticks([])
+    # Adjust y-limits to reduce the gap between x-axis and first channel
+    ax.set_ylim(
+        [offsets[0] - 200, offsets[-1] + 200]
+    )  # Adjust y-limits to include the first and last channel with some space
+
+    # Set the x-axis limit to start at start_time_sec
+    ax.set_xlim(t_sec[0], t_sec[-1])
+
+    # Set x-label and title
+    ax.set_xlabel("Time (s)", fontsize=12)
+    fig.suptitle(title, fontsize=14, y=0.95)
+
+    # Add channel labels at the y-axis location of each channel trace
+    for i, offset in enumerate(offsets):
+        ax.text(
+            -0.02,
+            offset,
+            data.columns[i],
+            transform=ax.get_yaxis_transform(),
+            ha="right",
+        )
+
+    plt.tight_layout(rect=[0, 0, 1, 0.97])  # Adjust the layout to accommodate the title
+
     return fig, ax
-
