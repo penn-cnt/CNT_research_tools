@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from typing import Tuple, Union
+from typing import Tuple, Union, Optional
 
 
 def plot_iEEG_data(
@@ -10,6 +10,7 @@ def plot_iEEG_data(
     start_time_usec: float,
     stop_time_usec: float,
     title: str = "iEEG Data",
+    data_overlay: Optional[Union[pd.DataFrame, np.ndarray]] = None,
 ) -> Tuple[plt.Figure, plt.Axes]:
     """
     Plots iEEG data, with each channel offset vertically for better visibility.
@@ -47,6 +48,9 @@ def plot_iEEG_data(
     data = data[start_idx:stop_idx]
     t_sec = np.linspace(start_time_sec, stop_time_sec, num=data.shape[0])
 
+    if data_overlay is not None:
+        data_overlay = data_overlay[start_idx:stop_idx]
+
     # Create a figure and a single set of axes
     fig, ax = plt.subplots(figsize=(10, 10))
 
@@ -60,6 +64,15 @@ def plot_iEEG_data(
         ax.plot(
             t_sec, data.iloc[:, i] + offsets[i], color="black", linewidth=0.8
         )  # Set color to black and decrease linewidth
+        if data_overlay is not None:
+            ax.plot(
+                t_sec,
+                data_overlay.iloc[:, i] + offsets[i],
+                color="blue",
+                linewidth=0.8,
+                linestyle="dashed",
+                label="Overlay" if i == 0 else "",
+            )
 
     # Hide the spines (borders)
     ax.spines["top"].set_visible(False)
@@ -88,6 +101,10 @@ def plot_iEEG_data(
             transform=ax.get_yaxis_transform(),
             ha="right",
         )
+
+    # Add a legend if data_overlay is provided
+    if data_overlay is not None:
+        ax.legend()
 
     plt.tight_layout(rect=[0, 0, 1, 0.97])  # Adjust the layout to accommodate the title
 
