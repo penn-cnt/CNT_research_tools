@@ -6,6 +6,7 @@ from typing import Tuple, Union
 
 def plot_iEEG_data(
     data: Union[pd.DataFrame, np.ndarray],
+    fs: float,
     start_time_usec: float,
     stop_time_usec: float,
     title: str = "iEEG Data",
@@ -17,6 +18,7 @@ def plot_iEEG_data(
     Parameters:
         data (Union[pd.DataFrame, np.ndarray]): The iEEG data to plot. If a DataFrame,
             columns are assumed to represent channels.
+        fs (float): The sampling frequency of the data in Hz.
         start_time_usec (float): The start time in microseconds.
         stop_time_usec (float): The stop time in microseconds.
         title (str, optional): The title of the plot. Defaults to 'iEEG Data'.
@@ -37,7 +39,12 @@ def plot_iEEG_data(
     start_time_sec = start_time_usec / 1e6
     stop_time_sec = stop_time_usec / 1e6
 
-    # Create a time vector in seconds
+    # Convert start and stop times to indices
+    start_idx = int(start_time_sec * fs)
+    stop_idx = int(stop_time_sec * fs)
+
+    # Slice data and create a new time vector based on the selected duration
+    data = data[start_idx:stop_idx]
     t_sec = np.linspace(start_time_sec, stop_time_sec, num=data.shape[0])
 
     # Create a figure and a single set of axes
