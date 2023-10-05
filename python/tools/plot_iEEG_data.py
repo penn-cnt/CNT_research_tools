@@ -73,7 +73,7 @@ def plot_iEEG_data(
             color=data_params.get("color", "black"),
             linewidth=data_params.get("linewidth", 0.8),
             linestyle=data_params.get("linestyle", "-"),
-            label=overlay_params.get("data_label", "Raw Data") if i == 0 else "",
+            label=data_params.get("label", "Raw Data") if i == 0 else "",
         )
         if data_overlay is not None:
             ax.plot(
@@ -82,7 +82,7 @@ def plot_iEEG_data(
                 color=overlay_params.get("color", "blue"),
                 linewidth=overlay_params.get("linewidth", 0.8),
                 linestyle=overlay_params.get("linestyle", "dashed"),
-                label=overlay_params.get("overlay_label", "Overlay") if i == 0 else "",
+                label=overlay_params.get("label", "Overlay") if i == 0 else "",
             )
 
     # Hide the spines (borders)
