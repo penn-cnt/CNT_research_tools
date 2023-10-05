@@ -29,12 +29,7 @@ def plot_iEEG_data(
     """
 
     # Replace NaN values with 0 and reverse channel order for visualization purposes
-    if isinstance(data, pd.DataFrame):
-        data = data.fillna(0)
-        data = data.iloc[:, ::-1]
-    elif isinstance(data, np.ndarray):
-        data = np.nan_to_num(data)
-        data = data.iloc[:, ::-1]
+    data = data.fillna(0).iloc[:, ::-1]
 
     # Convert start and stop times to seconds
     start_time_sec = start_time_usec / 1e6
@@ -45,11 +40,11 @@ def plot_iEEG_data(
     stop_idx = int(stop_time_sec * fs)
 
     # Slice data and create a new time vector based on the selected duration
-    data = data[start_idx:stop_idx]
+    data = data.iloc[start_idx:stop_idx, :]
     t_sec = np.linspace(start_time_sec, stop_time_sec, num=data.shape[0])
 
     if data_overlay is not None:
-        data_overlay = data_overlay[start_idx:stop_idx]
+        data_overlay = data_overlay.iloc[start_idx:stop_idx, :]
 
     # Create a figure and a single set of axes
     fig, ax = plt.subplots(figsize=(10, 10))
