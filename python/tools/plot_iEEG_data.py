@@ -55,7 +55,8 @@ def plot_iEEG_data(
     t_sec = np.linspace(start_time_sec, stop_time_sec, num=data.shape[0])
 
     if data_overlay is not None:
-        data_overlay = data_overlay.iloc[start_idx:stop_idx, :]
+        data_overlay = data_overlay.fillna(0).iloc[:, ::-1]  # replace NaN with 0
+        data_overlay = data_overlay.iloc[start_idx:stop_idx, :]  # slice data
 
     # Create a figure and a single set of axes
     fig, ax = plt.subplots(figsize=(10, 10))
