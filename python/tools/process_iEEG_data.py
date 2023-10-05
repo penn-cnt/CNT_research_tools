@@ -1,4 +1,5 @@
 import os
+import re
 import time
 import pickle
 import logging
@@ -7,7 +8,6 @@ import pandas as pd
 import logging.handlers
 from typing import List, Union, Optional, Tuple
 from ieeg.auth import Session
-from .clean_labels import clean_labels
 
 enable_logging = True
 if enable_logging:
@@ -223,3 +223,72 @@ def get_iEEG_data(
             logger.error(f"Failed to write data to {output_file}. Error: {e}")
     else:
         return df, fs
+
+
+def clean_labels(
+    channel_list: List[str],
+    remove_substr: Optional[str] = None,
+    delimiter: Optional[str] = None,
+) -> List[str]:
+    """
+    Cleans a list of channel labels by standardizing their format.
+
+    Parameters:
+    - channel_list (list): A list of channel labels as strings.
+    - remove_substr (str, optional): A substring to remove from each label. Defaults to None.
+    - delimiter (str, optional): A delimiter to split and rejoin label parts. Defaults to None.
+
+    Returns:
+    - list: A list of cleaned channel labels.
+    """
+    cleaned_channels = []
+
+    for label in channel_list:
+        if remove_substr:
+            label = label.replace(remove_substr, "")
+
+        if delimiter:
+            label_parts = label.split(delimiter)
+            label = delimiter.join(label_parts[1:])  # Skip the first part
+
+        regex_match = re.match(r"(\D+)(\d+)", label)
+
+        if regex_match:
+            lead = regex_match.group(1).strip()
+            contact = int(regex_match.group(2))
+            cleaned_channels.append(f"{lead}{contact:02d}")
+        else:
+            # If the regex match fails, keep the original label
+            cleaned_channels.append(label)
+
+    return cleaned_channels
+
+
+def find_non_ieeg(channel_li: List[str]) -> np.ndarray:
+    """
+    Identifies non-iEEG channel labels from a given list of channel labels.
+
+    Parameters:
+    - channel_li (List[str]): A list of channel labels as strings.
+
+    Returns:
+    - np.ndarray: A boolean numpy array where each element corresponds to whether
+                  the respective channel label in the input list is a non-iEEG channel.
+    """
+    non_ieeg = ["EKG", "O", "C", "ECG"]
+
+    is_non_ieeg = np.zeros(len(channel_li), dtype=bool)
+    for ind, i in enumerate(channel_li):
+        # Attempt to split channel label into a non-digit part and a digit part
+        regex_match = re.match(r"(\D+)(\d+)", i)
+        if regex_match is None:
+            # If no match is found, skip to the next iteration
+            continue
+
+        lead = regex_match.group(1)
+
+        # Check if the non-digit part matches any of the known non-iEEG label prefixes
+        if lead in non_ieeg:
+            is_non_ieeg[ind] = True
+
+    return is_non_ieeg
