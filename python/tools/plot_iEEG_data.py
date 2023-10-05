@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from typing import Tuple, Union, Optional
+from typing import Tuple, Union, Optional, Dict, Any
 
 
 def plot_iEEG_data(
@@ -9,8 +9,9 @@ def plot_iEEG_data(
     fs: float,
     start_time_usec: float,
     stop_time_usec: float,
-    title: str = "iEEG Data",
+    data_params: dict = {},
     data_overlay: Optional[Union[pd.DataFrame, np.ndarray]] = None,
+    overlay_params: dict = {},
 ) -> Tuple[plt.Figure, plt.Axes]:
     """
     Plots iEEG data, with each channel offset vertically for better visibility.
@@ -22,11 +23,21 @@ def plot_iEEG_data(
         fs (float): The sampling frequency of the data in Hz.
         start_time_usec (float): The start time in microseconds.
         stop_time_usec (float): The stop time in microseconds.
-        title (str, optional): The title of the plot. Defaults to 'iEEG Data'.
+        data_params: (dict): Parameters for customizing the primary data plot.
+        data_overlay: Optional[Union[pd.DataFrame, np.ndarray]]: Data to overlay on the plot.
+        overlay_params: (dict): Parameters for customizing the overlay plot.
 
     Returns:
         Tuple[plt.Figure, plt.Axes]: The figure and axis objects.
     """
+
+    # Ensure data is a DataFrame
+    data = pd.DataFrame(data) if not isinstance(data, pd.DataFrame) else data
+    data_overlay = (
+        pd.DataFrame(data_overlay)
+        if data_overlay is not None and not isinstance(data_overlay, pd.DataFrame)
+        else data_overlay
+    )
 
     # Replace NaN values with 0 and reverse channel order for visualization purposes
     data = data.fillna(0).iloc[:, ::-1]
@@ -54,19 +65,23 @@ def plot_iEEG_data(
         np.arange(data.shape[1]) * 200
     )  # Adjust the multiplier to control vertical spacing
 
-    # Loop through each channel and plot the data with vertical offset
     for i in range(data.shape[1]):
         ax.plot(
-            t_sec, data.iloc[:, i] + offsets[i], color="black", linewidth=0.8
-        )  # Set color to black and decrease linewidth
+            t_sec,
+            data.iloc[:, i] + offsets[i],
+            color=data_params.get("color", "black"),
+            linewidth=data_params.get("linewidth", 0.8),
+            linestyle=data_params.get("linestyle", "-"),
+            label=overlay_params.get("data_label", "Raw Data") if i == 0 else "",
+        )
         if data_overlay is not None:
             ax.plot(
                 t_sec,
                 data_overlay.iloc[:, i] + offsets[i],
-                color="blue",
-                linewidth=0.8,
-                linestyle="dashed",
-                label="Overlay" if i == 0 else "",
+                color=overlay_params.get("color", "blue"),
+                linewidth=overlay_params.get("linewidth", 0.8),
+                linestyle=overlay_params.get("linestyle", "dashed"),
+                label=overlay_params.get("overlay_label", "Overlay") if i == 0 else "",
             )
 
     # Hide the spines (borders)
@@ -75,17 +90,16 @@ def plot_iEEG_data(
 
     # Remove y-axis ticks and labels
     ax.set_yticks([])
+
     # Adjust y-limits to reduce the gap between x-axis and first channel
-    ax.set_ylim(
-        [offsets[0] - 200, offsets[-1] + 200]
-    )  # Adjust y-limits to include the first and last channel with some space
+    ax.set_ylim([offsets[0] - 200, offsets[-1] + 200])
 
     # Set the x-axis limit to start at start_time_sec
     ax.set_xlim(t_sec[0], t_sec[-1])
 
     # Set x-label and title
     ax.set_xlabel("Time (s)", fontsize=12)
-    fig.suptitle(title, fontsize=14, y=0.95)
+    fig.suptitle(data_params.get("title", "Data"), fontsize=14, y=0.95)
 
     # Add channel labels at the y-axis location of each channel trace
     for i, offset in enumerate(offsets):
@@ -97,9 +111,8 @@ def plot_iEEG_data(
             ha="right",
         )
 
-    # Add a legend if data_overlay is provided
-    if data_overlay is not None:
-        ax.legend()
+    # Add a legend
+    ax.legend(loc="upper right")
 
     plt.tight_layout(rect=[0, 0, 1, 0.97])  # Adjust the layout to accommodate the title
 
