@@ -58,9 +58,9 @@ def plot_iEEG_data(
 
     if data_overlay is not None:
         if overlay_params.get("fillna", True):
-            data_overlay = data_overlay.fillna(0)  # Replace NaN values with 0
-        data_overlay = data_overlay.iloc[:, ::-1]  # Reverse channel order
-        data_overlay = data_overlay.iloc[start_idx:stop_idx, :]  # Slice data
+            data_overlay = data_overlay.fillna(0)  # replace NaN values with 0
+        data_overlay = data_overlay.iloc[:, ::-1]  # reverse channel order
+        data_overlay = data_overlay.iloc[start_idx:stop_idx, :]  # slice data
 
     # Create a figure and a single set of axes
     fig, ax = plt.subplots(figsize=(10, 10))
@@ -68,7 +68,7 @@ def plot_iEEG_data(
     # Calculate vertical offset for each channel
     offsets = (
         np.arange(data.shape[1]) * 200
-    )  # Adjust the multiplier to control vertical spacing
+    )  # adjust the multiplier to control vertical spacing
 
     for i in range(data.shape[1]):
         ax.plot(
@@ -119,6 +119,6 @@ def plot_iEEG_data(
     # Add a legend
     ax.legend(loc="upper right")
 
-    plt.tight_layout(rect=[0, 0, 1, 0.97])  # Adjust the layout to accommodate the title
+    plt.tight_layout(rect=[0, 0, 1, 0.97])  # adjust the layout to accommodate the title
 
     return fig, ax
