@@ -4,6 +4,80 @@ from scipy.signal import iirnotch, sosfiltfilt, butter, filtfilt, lfilter
 from typing import Optional, Union
 
 
+def lowpass_filter(
+    data: Union[np.ndarray, pd.DataFrame],
+    fs: float,
+    cutoff: float,
+    order: int = 3,
+    causal: Optional[bool] = False,
+) -> Union[np.ndarray, pd.DataFrame]:
+    """Apply a lowpass filter to the data.
+
+    Args:
+        data (Union[np.ndarray, pd.DataFrame]): The input data to be filtered.
+        fs (float): The sampling frequency of the data.
+        cutoff (float): The cutoff frequency of the lowpass filter.
+        order (int, optional): The order of the filter. Defaults to 3.
+        causal (bool, optional): Whether to apply a causal filter. Defaults to False.
+
+    Returns:
+        Union[np.ndarray, pd.DataFrame]: The filtered data.
+    """
+    if isinstance(data, pd.DataFrame):
+        data_array = data.to_numpy()
+    else:
+        data_array = data
+
+    if causal:
+        b, a = butter(order, cutoff, output="ba", fs=fs, btype="low")
+        data_filt = lfilter(b, a, data_array, axis=0)
+    else:
+        sos = butter(order, cutoff, output="sos", fs=fs, btype="low")
+        data_filt = sosfiltfilt(sos, data_array, axis=0)
+
+    if isinstance(data, pd.DataFrame):
+        return pd.DataFrame(data_filt, columns=data.columns, index=data.index)
+    else:
+        return data_filt
+
+
+def highpass_filter(
+    data: Union[np.ndarray, pd.DataFrame],
+    fs: float,
+    cutoff: float,
+    order: int = 3,
+    causal: Optional[bool] = False,
+) -> Union[np.ndarray, pd.DataFrame]:
+    """Apply a highpass filter to the data.
+
+    Args:
+        data (Union[np.ndarray, pd.DataFrame]): The input data to be filtered.
+        fs (float): The sampling frequency of the data.
+        cutoff (float): The cutoff frequency of the highpass filter.
+        order (int, optional): The order of the filter. Defaults to 3.
+        causal (bool, optional): Whether to apply a causal filter. Defaults to False.
+
+    Returns:
+        Union[np.ndarray, pd.DataFrame]: The filtered data.
+    """
+    if isinstance(data, pd.DataFrame):
+        data_array = data.to_numpy()
+    else:
+        data_array = data
+
+    if causal:
+        b, a = butter(order, cutoff, output="ba", fs=fs, btype="high")
+        data_filt = lfilter(b, a, data_array, axis=0)
+    else:
+        sos = butter(order, cutoff, output="sos", fs=fs, btype="high")
+        data_filt = sosfiltfilt(sos, data_array, axis=0)
+
+    if isinstance(data, pd.DataFrame):
+        return pd.DataFrame(data_filt, columns=data.columns, index=data.index)
+    else:
+        return data_filt
+
+
 def notch_filter(
     data: Union[pd.DataFrame, np.ndarray],
     fs: float,
